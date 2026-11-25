@@ -870,6 +870,43 @@ private theorem lineHolder_weight_memLp {α s β : ℝ} (hα0 : α = 0) (hβs : 
   push_cast
   ring
 
+/-- At width zero, the distance between the zeroth jets at two zeros of one character, in the
+reciprocal-weight space, is at most a constant times the `β`-th power of the distance between
+their ordinates. -/
+private theorem lineHolder_jet_dist_le (hα0 : α = 0) (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
+    {β : ℝ} (hβ0 : 0 ≤ β) (hβ1 : β ≤ 1) (hβs : 2 * β < s - 1) (j k : J(χ))
+    (hχk : k.val.1 = j.val.1) (hj0 : j.val.2.1 = 0) (hk0 : k.val.2.1 = 0)
+    (hjm : j.val.2.2.2 = 0) (hkm : k.val.2.2.2 = 0) :
+    ‖u(χ, j) - u(χ, k)‖ ≤ 2 * |j.val.2.2.1 - k.val.2.2.1| ^ β *
+      (eLpNorm (fun g : C𝔽 ↦ (1 + logIdeleClassNorm F g ^ 2) ^ (β / 2)) 2
+        (intervalSobolevMeasure μ𝔽 (logIdeleClassNorm F) (-α) α s true)).toReal := by
+  have hmj := spectralStripJet_memLp χ hα hs₀(hs) j
+  have hmk := spectralStripJet_memLp χ hα hs₀(hs) k
+  rw [← MemLp.toLp_sub, Lp.norm_toLp]
+  have hbound : ∀ g : C𝔽, ‖(raw(χ, j) - raw(χ, k)) g‖ ≤
+      ‖(2 * |j.val.2.2.1 - k.val.2.2.1| ^ β) * (1 + logIdeleClassNorm F g ^ 2) ^ (β / 2)‖ := by
+    intro g
+    have hj' : raw(χ, j) g = spectralZeroJet (χ j.val.1) 0 j.val.2.2.1 0 g := by
+      simp only [hj0, hjm]
+    have hk' : raw(χ, k) g = spectralZeroJet (χ j.val.1) 0 k.val.2.2.1 0 g := by
+      simp only [hk0, hkm, hχk]
+    rw [Pi.sub_apply, hj', hk', Real.norm_eq_abs, abs_of_nonneg (by positivity)]
+    exact (lineHolder_jet_sub_le (χ j.val.1) _ _ g hβ0 hβ1).trans_eq (by ring)
+  calc (eLpNorm (raw(χ, j) - raw(χ, k)) 2 _).toReal
+      ≤ (eLpNorm (fun g : C𝔽 ↦ (2 * |j.val.2.2.1 - k.val.2.2.1| ^ β) *
+          (1 + logIdeleClassNorm F g ^ 2) ^ (β / 2)) 2
+          (intervalSobolevMeasure μ𝔽 (logIdeleClassNorm F) (-α) α s true)).toReal := by
+        refine ENNReal.toReal_mono ?_
+          (eLpNorm_mono (hmj.sub hmk).aestronglyMeasurable fun g ↦ hbound g)
+        exact ((lineHolder_weight_memLp (F := F) hα0 hβs).const_mul _).eLpNorm_ne_top
+    _ = _ := by
+        rw [show (fun g : C𝔽 ↦ (2 * |j.val.2.2.1 - k.val.2.2.1| ^ β) *
+            (1 + logIdeleClassNorm F g ^ 2) ^ (β / 2)) =
+            (2 * |j.val.2.2.1 - k.val.2.2.1| ^ β) •
+              (fun g : C𝔽 ↦ (1 + logIdeleClassNorm F g ^ 2) ^ (β / 2)) from rfl,
+          eLpNorm_const_smul, ENNReal.toReal_mul, toReal_eNorm, Real.norm_eq_abs,
+          abs_of_nonneg (by positivity)]
+
 /-- Paper: Theorem 10.3.2.1(1), pp. 453–455. What the recorded gap
 `spectralStripConvolution_traceCauchy_compact_block_series` of `Sec3` (#7241) forces at width
 zero, in terms of the ordinates. If the block traces are summable after every compact insertion,
@@ -903,37 +940,13 @@ theorem spectralStripConvolution_compact_block_series_forces_line_holder (hα0 :
   refine ⟨C * (2 * K + 1) / c, div_pos (mul_pos hC (by linarith)) hc, fun z w hwz hχzw hz hw ↦ ?_⟩
   let jz : J(χ) := jet(z, (⟨0, hz⟩ : Fin (N(χ, α, s, z))))
   let jw : J(χ) := jet(w, (⟨0, hw⟩ : Fin (N(χ, α, s, w))))
-  have hz0 : z.val.2.1 = 0 := by have := z.property.1; simp only [mem_Icc] at this; subst hα0; linarith
-  have hw0 : w.val.2.1 = 0 := by have := w.property.1; simp only [mem_Icc] at this; subst hα0; linarith
-  -- the jets as functions
-  have hmz := spectralStripJet_memLp χ hα hs₀(hs) jz
-  have hmw := spectralStripJet_memLp χ hα hs₀(hs) jw
+  have hz0 : z.val.2.1 = 0 := by
+    have := z.property.1; simp only [mem_Icc] at this; subst hα0; linarith
+  have hw0 : w.val.2.1 = 0 := by
+    have := w.property.1; simp only [mem_Icc] at this; subst hα0; linarith
   have hdiff : ‖Λ jz - Λ jw‖ ≤ 2 * |z.val.2.2 - w.val.2.2| ^ β * K := by
-    rw [← hD.norm_map_of_map_zero (map_zero D), map_sub, hj, hj, ← MemLp.toLp_sub, Lp.norm_toLp]
-    have hbound : ∀ g : C𝔽, ‖(raw(χ, jz) - raw(χ, jw)) g‖ ≤
-        ‖(2 * |z.val.2.2 - w.val.2.2| ^ β) * (1 + logIdeleClassNorm F g ^ 2) ^ (β / 2)‖ := by
-      intro g
-      have hjz : raw(χ, jz) g = spectralZeroJet (χ z.val.1) 0 z.val.2.2 0 g := by
-        simp only [jz, hz0]
-      have hjw : raw(χ, jw) g = spectralZeroJet (χ z.val.1) 0 w.val.2.2 0 g := by
-        simp only [jw, hw0, hχzw]
-      rw [Pi.sub_apply, hjz, hjw, Real.norm_eq_abs,
-        abs_of_nonneg (by positivity)]
-      exact (lineHolder_jet_sub_le (χ z.val.1) _ _ g hβ0 hβ1).trans_eq (by ring)
-    calc (eLpNorm (raw(χ, jz) - raw(χ, jw)) 2 _).toReal
-        ≤ (eLpNorm (fun g : C𝔽 ↦ (2 * |z.val.2.2 - w.val.2.2| ^ β) *
-            (1 + logIdeleClassNorm F g ^ 2) ^ (β / 2)) 2
-            (intervalSobolevMeasure μ𝔽 (logIdeleClassNorm F) (-α) α s true)).toReal := by
-          refine ENNReal.toReal_mono ?_
-            (eLpNorm_mono (hmz.sub hmw).aestronglyMeasurable fun g ↦ hbound g)
-          exact ((lineHolder_weight_memLp (F := F) hα0 hβs).const_mul _).eLpNorm_ne_top
-      _ = 2 * |z.val.2.2 - w.val.2.2| ^ β * K := by
-          rw [show (fun g : C𝔽 ↦ (2 * |z.val.2.2 - w.val.2.2| ^ β) *
-              (1 + logIdeleClassNorm F g ^ 2) ^ (β / 2)) =
-              (2 * |z.val.2.2 - w.val.2.2| ^ β) •
-                (fun g : C𝔽 ↦ (1 + logIdeleClassNorm F g ^ 2) ^ (β / 2)) from rfl,
-            eLpNorm_const_smul, ENNReal.toReal_mul, ← hK, toReal_eNorm, Real.norm_eq_abs,
-            abs_of_nonneg (by positivity)]
+    rw [← hD.norm_map_of_map_zero (map_zero D), map_sub, hj, hj, hK]
+    exact lineHolder_jet_dist_le a hα hs hα0 χ hβ0 hβ1 hβs jz jw hχzw hz0 hw0 rfl rfl
   have hnorm : c ≤ ‖Λ jz‖ := by
     rw [← hD.norm_map_of_map_zero (map_zero D), hj]
     exact hlow jz
@@ -948,6 +961,83 @@ theorem spectralStripConvolution_compact_block_series_forces_line_holder (hα0 :
     _ ≤ C * (2 * |z.val.2.2 - w.val.2.2| ^ β * K) := mul_le_mul_of_nonneg_left hdiff hC.le
     _ ≤ |z.val.2.2 - w.val.2.2| ^ β * (C * (2 * K + 1)) := by
       nlinarith [mul_nonneg hC.le hd0]
+
+/-- Paper: Theorem 10.3.2.1(1), pp. 453–455. What the majorant
+`spectralStripConvolution_summable_jetNorms` (equivalently the open bound
+`spectralStripConvolution_finiteGram_bound`, #7455) forces at width zero, in terms of the
+ordinates. Assign to each zero `z` another zero `w z` of the same character. If the series of
+the majorant converges for nonnegative weights `M`, then so does `Σ M z / |Im z - Im (w z)| ^ β`
+for every exponent `0 ≤ β ≤ 1` with `2β < s - 1`. With `M` the Mellin maxima of the test and
+`w z` a nearest zero, this is a quantitative lower bound for the gaps between zeros on the line. -/
+theorem spectralStripConvolution_summable_jetNorms_forces_line_gaps (hα0 : α = 0)
+    (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (hχ : IsSpectralBasepointChoice χ)
+    (x : J(χ) → Q(a, hStrip(hα), hs₀(hs))) (Λ : J(χ) → StrongDual ℂ Q(a, hStrip(hα), hs₀(hs)))
+    (hb : IsSpectralMarkushevichBasis x Λ) (hj : ∀ j, D (Λ j) = u(χ, j))
+    (M : Z(χ, α) → ℝ) (hM : ∀ z, 0 ≤ M z)
+    (hsum : Summable (fun z : Z(χ, α) ↦ M z *
+        ∑ m : Fin (N(χ, α, s, z)), ‖Λ (jet(z, m))‖ * ‖x (jet(z, m))‖))
+    (w : Z(χ, α) → Z(χ, α)) (hw : ∀ z, w z ≠ z) (hwχ : ∀ z, (w z).val.1 = z.val.1)
+    (hN : ∀ z : Z(χ, α), 0 < N(χ, α, s, z)) {β : ℝ} (hβ0 : 0 ≤ β) (hβ1 : β ≤ 1)
+    (hβs : 2 * β < s - 1) :
+    Summable (fun z : Z(χ, α) ↦ M z * (|z.val.2.2 - (w z).val.2.2| ^ β)⁻¹) := by
+  let zero (j : J(χ)) : Z(χ, α) :=
+    ⟨(j.val.1, j.val.2.1, j.val.2.2.1), SpectralStripJetIndex.mem_strip_order_pos hα j⟩
+  let c (j : J(χ)) : J(χ) := jet(w (zero j), (⟨0, hN _⟩ : Fin (N(χ, α, s, w (zero j)))))
+  have hc : ∀ j, c j ≠ j := by
+    intro j hcj
+    apply hw (zero j)
+    apply Subtype.ext
+    have h1 := congrArg (fun i : J(χ) ↦ i.val.1) hcj
+    have h2 := congrArg (fun i : J(χ) ↦ i.val.2.1) hcj
+    have h3 := congrArg (fun i : J(χ) ↦ i.val.2.2.1) hcj
+    exact Prod.ext h1 (Prod.ext h2 h3)
+  have hsep := spectralStripConvolution_summable_jetNorms_forces_summable_separation a hα hs χ x Λ
+    hb hj M hM c hc hsum
+  obtain ⟨c₀, hc₀, hlow⟩ := spectralStripJet_lowerBound χ hχ (a := a) hα hs
+  have hind := spectralStripJet_linearIndependent_of_biorthogonal a hα hs χ x Λ hb hj
+  obtain ⟨K, hK⟩ : ∃ K : ℝ, K = (eLpNorm (fun g : C𝔽 ↦ (1 + logIdeleClassNorm F g ^ 2) ^ (β / 2))
+    2 (intervalSobolevMeasure μ𝔽 (logIdeleClassNorm F) (-α) α s true)).toReal := ⟨_, rfl⟩
+  have hK0 : 0 ≤ K := hK ▸ ENNReal.toReal_nonneg
+  refine Summable.of_nonneg_of_le (fun z ↦ mul_nonneg (hM z) (inv_nonneg.mpr
+    (Real.rpow_nonneg (abs_nonneg _) _))) (fun z ↦ ?_) (hsep.mul_left ((2 * K + 1) / c₀))
+  let j0 : J(χ) := jet(z, (⟨0, hN z⟩ : Fin (N(χ, α, s, z))))
+  have hz0 : z.val.2.1 = 0 := by
+    have := z.property.1; simp only [mem_Icc] at this; subst hα0; linarith
+  have hw0 : (w z).val.2.1 = 0 := by
+    have := (w z).property.1; simp only [mem_Icc] at this; subst hα0; linarith
+  have hdist : ‖u(χ, j0) - u(χ, c j0)‖ ≤ 2 * |z.val.2.2 - (w z).val.2.2| ^ β * K := by
+    rw [hK]
+    exact lineHolder_jet_dist_le a hα hs hα0 χ hβ0 hβ1 hβs j0 (c j0) (hwχ z) hz0 hw0 rfl rfl
+  have hpos : 0 < ‖u(χ, j0) - u(χ, c j0)‖ :=
+    norm_pos_iff.mpr (sub_ne_zero.mpr fun h ↦ hc j0 (hind.injective h).symm)
+  have hterm : (|z.val.2.2 - (w z).val.2.2| ^ β)⁻¹ ≤
+      (2 * K + 1) / c₀ * (‖u(χ, j0)‖ / ‖u(χ, j0) - u(χ, c j0)‖) := by
+    rcases (Real.rpow_nonneg (abs_nonneg (z.val.2.2 - (w z).val.2.2)) β).eq_or_lt with h0 | hd
+    · rw [← h0, inv_zero]
+      exact mul_nonneg (div_nonneg (by linarith) hc₀.le) (div_nonneg (norm_nonneg _) hpos.le)
+    · have hu : c₀ ≤ ‖u(χ, j0)‖ := hlow j0
+      rw [div_mul_div_comm, le_div_iff₀ (mul_pos hc₀ hpos), inv_mul_eq_div, div_le_iff₀ hd]
+      calc c₀ * ‖u(χ, j0) - u(χ, c j0)‖ ≤ c₀ * (2 * |z.val.2.2 - (w z).val.2.2| ^ β * K) :=
+            mul_le_mul_of_nonneg_left hdist hc₀.le
+        _ ≤ (2 * K + 1) * ‖u(χ, j0)‖ * |z.val.2.2 - (w z).val.2.2| ^ β := by
+            nlinarith [mul_nonneg hc₀.le hd.le, mul_le_mul_of_nonneg_right hu hd.le]
+  have hsingle : ‖u(χ, j0)‖ / ‖u(χ, j0) - u(χ, c j0)‖ ≤ ∑ m : Fin (N(χ, α, s, z)),
+      ‖u(χ, (jet(z, m) : J(χ)))‖ / ‖u(χ, (jet(z, m) : J(χ))) - u(χ, c (jet(z, m) : J(χ)))‖ :=
+    Finset.single_le_sum (f := fun m : Fin (N(χ, α, s, z)) ↦
+      ‖u(χ, (jet(z, m) : J(χ)))‖ / ‖u(χ, (jet(z, m) : J(χ))) - u(χ, c (jet(z, m) : J(χ)))‖)
+      (fun m _ ↦ div_nonneg (norm_nonneg _) (norm_nonneg _))
+      (Finset.mem_univ (⟨0, hN z⟩ : Fin (N(χ, α, s, z))))
+  calc M z * (|z.val.2.2 - (w z).val.2.2| ^ β)⁻¹
+      ≤ M z * ((2 * K + 1) / c₀ * (‖u(χ, j0)‖ / ‖u(χ, j0) - u(χ, c j0)‖)) :=
+        mul_le_mul_of_nonneg_left hterm (hM z)
+    _ ≤ M z * ((2 * K + 1) / c₀ * ∑ m : Fin (N(χ, α, s, z)),
+          ‖u(χ, (jet(z, m) : J(χ)))‖ / ‖u(χ, (jet(z, m) : J(χ))) - u(χ, c (jet(z, m) : J(χ)))‖) :=
+        mul_le_mul_of_nonneg_left (mul_le_mul_of_nonneg_left hsingle
+          (div_nonneg (by linarith) hc₀.le)) (hM z)
+    _ = (2 * K + 1) / c₀ * (M z * ∑ m : Fin (N(χ, α, s, z)),
+          ‖u(χ, (jet(z, m) : J(χ)))‖ /
+            ‖u(χ, (jet(z, m) : J(χ))) - u(χ, c (jet(z, m) : J(χ)))‖) := by
+        ring
 
 end LineHolder
 
