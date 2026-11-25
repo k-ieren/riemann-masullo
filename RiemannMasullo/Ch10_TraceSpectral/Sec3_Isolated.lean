@@ -5,6 +5,8 @@ public import RiemannMasullo.Ch10_TraceSpectral.Sec3_LineGaps
 public import RiemannMasullo.ForMathlib.Analysis.InnerProductSpace.GramMatrix
 import RiemannMasullo.Ch10_TraceSpectral.Sec1
 import RiemannMasullo.ForMathlib.Analysis.MellinTransform.Holomorphic
+import RiemannMasullo.Ch11_ShellStructure.Sec2a
+import Mathlib.Analysis.SpecialFunctions.JapaneseBracket
 
 /-! # The block series of Theorem 10.3.2.1(1): a sufficient majorant and a necessary separation
 
@@ -751,6 +753,203 @@ theorem spectralStripConvolution_summable_jetNorms_forces_summable_separation
   refine Summable.of_nonneg_of_le (fun z ↦ mul_nonneg (hM z) (Finset.sum_nonneg fun m _ ↦
     div_nonneg (norm_nonneg _) (norm_nonneg _))) (fun z ↦ mul_le_mul_of_nonneg_left
       (Finset.sum_le_sum fun m _ ↦ hle _) (hM z)) hsum
+
+section LineHolder
+
+local notation "ν𝔽" => canonicalModulatedHaar m𝔽 hm𝔽
+
+local instance lineHolderCanonicalHaar : (ν𝔽).IsHaarMeasure :=
+  (existsUnique_canonicalModulatedHaar m𝔽 hm𝔽).exists.choose_spec.1
+
+/-- The logarithm of the idele class norm carries the Tamagawa measure to a multiple of
+Lebesgue measure. -/
+private theorem lineHolder_log_preserving : MeasurePreserving (logIdeleClassNorm F) μ𝔽
+    (Measure.haarScalarFactor μ𝔽 ν𝔽 • volume) := by
+  conv_lhs => rw [Measure.isMulLeftInvariant_eq_smul μ𝔽 ν𝔽]
+  exact (orbitalJet_logNorm_measurePreserving (F := F)).smul_measure _
+
+/-- A zeroth jet at real offset zero is the character times a unimodular wave in the
+logarithm of the norm. -/
+private theorem lineHolder_jet_phase (η : PontryaginDual C𝔽) (t : ℝ) (g : C𝔽) :
+    spectralZeroJet η 0 t 0 g =
+      (η g : ℂ) * Complex.exp (Complex.I * ((t * logIdeleClassNorm F g : ℝ) : ℂ)) := by
+  have hp : (0 : ℝ) < ((ideleClassNorm F g).val : ℝ) := NNReal.coe_pos.mpr (Units.zero_lt _)
+  change ((η g : ℂ) * (((ideleClassNorm F g).val : ℝ) : ℂ) ^
+    ((0 : ℂ) + (t : ℂ) * Complex.I)) * _ ^ 0 = _
+  rw [zero_add, pow_zero, mul_one, Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr hp.ne'),
+    ← Complex.ofReal_log hp.le]
+  congr 2
+  change (logIdeleClassNorm F g : ℂ) * (t * Complex.I) = _
+  push_cast
+  ring
+
+/-- An elementary interpolation: a quantity bounded by `2` and by `y ≥ 0` is bounded by
+`2 y ^ β` for `0 ≤ β ≤ 1`. -/
+private theorem lineHolder_le_two_mul_rpow {q y β : ℝ} (hy : 0 ≤ y) (hβ0 : 0 ≤ β) (hβ1 : β ≤ 1)
+    (h2 : q ≤ 2) (hq : q ≤ y) : q ≤ 2 * y ^ β := by
+  rcases le_or_gt 1 y with h1 | h1
+  · have : 1 ≤ y ^ β := Real.one_le_rpow h1 hβ0
+    linarith
+  · have hyβ : y ≤ y ^ β := by
+      simpa using Real.rpow_le_rpow_of_exponent_ge' hy h1.le hβ0 hβ1
+    have : 0 ≤ y ^ β := Real.rpow_nonneg hy β
+    linarith
+
+/-- Pointwise Hölder bound for the difference of two zeroth jets at real offset zero on one
+character. -/
+private theorem lineHolder_jet_sub_le (η : PontryaginDual C𝔽) (u v : ℝ) (g : C𝔽)
+    {β : ℝ} (hβ0 : 0 ≤ β) (hβ1 : β ≤ 1) :
+    ‖spectralZeroJet η 0 u 0 g - spectralZeroJet η 0 v 0 g‖ ≤
+      2 * |u - v| ^ β * (1 + logIdeleClassNorm F g ^ 2) ^ (β / 2) := by
+  set L := logIdeleClassNorm F g
+  have hsplit : Complex.exp (Complex.I * ((u * L : ℝ) : ℂ)) =
+      Complex.exp (Complex.I * ((v * L : ℝ) : ℂ)) *
+        Complex.exp (Complex.I * (((u - v) * L : ℝ) : ℂ)) := by
+    rw [← Complex.exp_add]; congr 1; push_cast; ring
+  have hphase : ‖spectralZeroJet η 0 u 0 g - spectralZeroJet η 0 v 0 g‖ =
+      ‖Complex.exp (Complex.I * (((u - v) * L : ℝ) : ℂ)) - 1‖ := by
+    rw [lineHolder_jet_phase, lineHolder_jet_phase, ← mul_sub, norm_mul, Circle.norm_coe, one_mul,
+      hsplit, ← mul_sub_one, norm_mul, Complex.norm_exp_I_mul_ofReal, one_mul]
+  have h2 : ‖Complex.exp (Complex.I * (((u - v) * L : ℝ) : ℂ)) - 1‖ ≤ 2 := by
+    calc _ ≤ ‖Complex.exp (Complex.I * (((u - v) * L : ℝ) : ℂ))‖ + ‖(1 : ℂ)‖ := norm_sub_le _ _
+      _ = 2 := by rw [Complex.norm_exp_I_mul_ofReal, norm_one]; norm_num
+  have hy : ‖Complex.exp (Complex.I * (((u - v) * L : ℝ) : ℂ)) - 1‖ ≤ |u - v| * |L| := by
+    have := Real.norm_exp_I_mul_ofReal_sub_one_le (x := (u - v) * L)
+    rwa [Real.norm_eq_abs, abs_mul] at this
+  have hmain := lineHolder_le_two_mul_rpow (mul_nonneg (abs_nonneg _) (abs_nonneg _)) hβ0 hβ1 h2 hy
+  rw [hphase]
+  refine hmain.trans ?_
+  rw [Real.mul_rpow (abs_nonneg _) (abs_nonneg _), mul_assoc]
+  gcongr
+  have hL : |L| ≤ (1 + L ^ 2) ^ (1 / 2 : ℝ) := by
+    rw [← Real.sqrt_eq_rpow, ← Real.sqrt_sq_eq_abs]
+    exact Real.sqrt_le_sqrt (by linarith)
+  calc |L| ^ β ≤ ((1 + L ^ 2) ^ (1 / 2 : ℝ)) ^ β := Real.rpow_le_rpow (abs_nonneg _) hL hβ0
+    _ = (1 + L ^ 2) ^ (β / 2) := by
+      rw [← Real.rpow_mul (by positivity)]; ring_nf
+
+/-- At width zero the reciprocal Sobolev measure is the Tamagawa measure with density
+`(1 + L²)^(-s/2)` in the logarithm `L` of the norm. -/
+private theorem lineHolder_measure_eq (s : ℝ) {α : ℝ} (hα0 : α = 0) :
+    intervalSobolevMeasure μ𝔽 (logIdeleClassNorm F) (-α) α s true =
+      Measure.withDensity μ𝔽 fun g ↦
+        ENNReal.ofReal ((1 + logIdeleClassNorm F g ^ 2) ^ (s / 2))⁻¹ := by
+  subst hα0
+  simp [intervalSobolevMeasure, intervalSobolevDensity]
+
+/-- At width zero the weight `(1 + L²)^(β/2)` is square integrable for the reciprocal Sobolev
+measure once `2β < s - 1`. -/
+private theorem lineHolder_weight_memLp {α s β : ℝ} (hα0 : α = 0) (hβs : 2 * β < s - 1) :
+    MemLp (fun g : C𝔽 ↦ (1 + logIdeleClassNorm F g ^ 2) ^ (β / 2)) 2
+      (intervalSobolevMeasure μ𝔽 (logIdeleClassNorm F) (-α) α s true) := by
+  have hLc : Continuous (logIdeleClassNorm F) := orbitalJet_logNorm_continuous (F := F)
+  have hbase : Continuous fun g : C𝔽 ↦ 1 + logIdeleClassNorm F g ^ 2 :=
+    continuous_const.add (hLc.pow 2)
+  have hcont : Continuous fun g : C𝔽 ↦ (1 + logIdeleClassNorm F g ^ 2) ^ (β / 2) :=
+    hbase.rpow_const fun _ ↦ Or.inl (by positivity)
+  have hdens : Measurable fun g : C𝔽 ↦
+      ENNReal.ofReal ((1 + logIdeleClassNorm F g ^ 2) ^ (s / 2))⁻¹ :=
+    (hbase.rpow_const fun _ ↦ Or.inl (by positivity)).measurable.inv.ennreal_ofReal
+  rw [lineHolder_measure_eq s hα0]
+  apply (memLp_two_iff_integrable_sq_norm hcont.aestronglyMeasurable).2
+  rw [integrable_withDensity_iff hdens (ae_of_all _ fun _ ↦ ENNReal.ofReal_lt_top)]
+  have hr : ((Module.finrank ℝ ℝ : ℕ) : ℝ) < s - 2 * β := by
+    rw [Module.finrank_self]; push_cast; linarith
+  have hi := (lineHolder_log_preserving (F := F)).integrable_comp_of_integrable
+    ((integrable_rpow_neg_one_add_norm_sq (E := ℝ) hr).smul_measure_nnreal
+      (c := Measure.haarScalarFactor μ𝔽 ν𝔽))
+  apply hi.congr (ae_of_all _ fun g ↦ ?_)
+  set L := logIdeleClassNorm F g
+  have h1 : (0 : ℝ) < 1 + L ^ 2 := by positivity
+  simp only [Function.comp_apply, Real.norm_eq_abs, sq_abs]
+  rw [ENNReal.toReal_ofReal (inv_nonneg.mpr (Real.rpow_nonneg h1.le _))]
+  change (1 + L ^ 2) ^ (-(s - 2 * β) / 2) = ((1 + L ^ 2) ^ (β / 2)) ^ 2 * ((1 + L ^ 2) ^ (s / 2))⁻¹
+  rw [← Real.rpow_natCast ((1 + L ^ 2) ^ (β / 2)) 2, ← Real.rpow_mul h1.le, ← Real.rpow_neg h1.le,
+    ← Real.rpow_add h1]
+  congr 1
+  push_cast
+  ring
+
+/-- Paper: Theorem 10.3.2.1(1), pp. 453–455. What the recorded gap
+`spectralStripConvolution_traceCauchy_compact_block_series` of `Sec3` (#7241) forces at width
+zero, in terms of the ordinates. If the block traces are summable after every compact insertion,
+then for every exponent `0 ≤ β ≤ 1` with `2β < s - 1` one constant bounds, at any two distinct
+zeros `z, w` of one character, the Mellin value of the test at `z` by that constant times
+`|Im z - Im w| ^ β`. So two zeros on the line that come close force the Mellin transform of
+every test down at both; with tests modulated to a prescribed height this becomes a lower bound,
+polynomial in the height, for the gaps between zeros on the line. -/
+theorem spectralStripConvolution_compact_block_series_forces_line_holder (hα0 : α = 0)
+    (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (hχ : IsSpectralBasepointChoice χ)
+    (x : J(χ) → Q(a, hStrip(hα), hs₀(hs))) (Λ : J(χ) → StrongDual ℂ Q(a, hStrip(hα), hs₀(hs)))
+    (hb : IsSpectralMarkushevichBasis x Λ)
+    (hj : ∀ j, D (Λ j) = (spectralStripJet_memLp χ hα hs₀(hs) j).toLp (raw(χ, j)))
+    (φ : BruhatCompactSupport C𝔽)
+    (h : ∀ U : compactOperator (RingHom.id ℂ) Q(a, hStrip(hα), hs₀(hs)) Q(a, hStrip(hα), hs₀(hs)),
+      Summable (fun z : Z(χ, α) ↦ ∑ m : Fin (N(χ, α, s, z)), Λ (jet(z, m))
+        (spectralConvolution (F := F) a hStrip(hα) hs₀(hs) φ (U.val (x (jet(z, m)))))))
+    {β : ℝ} (hβ0 : 0 ≤ β) (hβ1 : β ≤ 1) (hβs : 2 * β < s - 1) :
+    ∃ C > (0 : ℝ), ∀ (z w : Z(χ, α)), w ≠ z → w.val.1 = z.val.1 →
+      ∀ (_hz : 0 < N(χ, α, s, z)) (_hw : 0 < N(χ, α, s, w)),
+      ‖M(φ, χ z.val.1, shift(z.val.2.1, z.val.2.2))‖ ≤ C * |z.val.2.2 - w.val.2.2| ^ β := by
+  obtain ⟨C, hC, hsep⟩ :=
+    spectralStripConvolution_compact_block_series_forces_jet_separation a hα hs χ x Λ hb hj φ h
+  obtain ⟨c, hc, hlow⟩ := spectralStripJet_lowerBound χ hχ (a := a) hα hs
+  have hD : Isometry D := (spectralSobolevDualEmbedding_isometry_range (F := F) a
+    hStrip(hα) hs₀(hs)).1
+  obtain ⟨K, hK⟩ : ∃ K : ℝ, K = (eLpNorm (fun g : C𝔽 ↦ (1 + logIdeleClassNorm F g ^ 2) ^ (β / 2)) 2
+    (intervalSobolevMeasure μ𝔽 (logIdeleClassNorm F) (-α) α s true)).toReal := ⟨_, rfl⟩
+  have hK0 : 0 ≤ K := hK ▸ ENNReal.toReal_nonneg
+  have hKfin := (lineHolder_weight_memLp (F := F) hα0 hβs).eLpNorm_ne_top
+  refine ⟨C * (2 * K + 1) / c, div_pos (mul_pos hC (by linarith)) hc, fun z w hwz hχzw hz hw ↦ ?_⟩
+  let jz : J(χ) := jet(z, (⟨0, hz⟩ : Fin (N(χ, α, s, z))))
+  let jw : J(χ) := jet(w, (⟨0, hw⟩ : Fin (N(χ, α, s, w))))
+  have hz0 : z.val.2.1 = 0 := by have := z.property.1; simp only [mem_Icc] at this; subst hα0; linarith
+  have hw0 : w.val.2.1 = 0 := by have := w.property.1; simp only [mem_Icc] at this; subst hα0; linarith
+  -- the jets as functions
+  have hmz := spectralStripJet_memLp χ hα hs₀(hs) jz
+  have hmw := spectralStripJet_memLp χ hα hs₀(hs) jw
+  have hdiff : ‖Λ jz - Λ jw‖ ≤ 2 * |z.val.2.2 - w.val.2.2| ^ β * K := by
+    rw [← hD.norm_map_of_map_zero (map_zero D), map_sub, hj, hj, ← MemLp.toLp_sub, Lp.norm_toLp]
+    have hbound : ∀ g : C𝔽, ‖(raw(χ, jz) - raw(χ, jw)) g‖ ≤
+        ‖(2 * |z.val.2.2 - w.val.2.2| ^ β) * (1 + logIdeleClassNorm F g ^ 2) ^ (β / 2)‖ := by
+      intro g
+      have hjz : raw(χ, jz) g = spectralZeroJet (χ z.val.1) 0 z.val.2.2 0 g := by
+        simp only [jz, hz0]
+      have hjw : raw(χ, jw) g = spectralZeroJet (χ z.val.1) 0 w.val.2.2 0 g := by
+        simp only [jw, hw0, hχzw]
+      rw [Pi.sub_apply, hjz, hjw, Real.norm_eq_abs,
+        abs_of_nonneg (by positivity)]
+      exact (lineHolder_jet_sub_le (χ z.val.1) _ _ g hβ0 hβ1).trans_eq (by ring)
+    calc (eLpNorm (raw(χ, jz) - raw(χ, jw)) 2 _).toReal
+        ≤ (eLpNorm (fun g : C𝔽 ↦ (2 * |z.val.2.2 - w.val.2.2| ^ β) *
+            (1 + logIdeleClassNorm F g ^ 2) ^ (β / 2)) 2
+            (intervalSobolevMeasure μ𝔽 (logIdeleClassNorm F) (-α) α s true)).toReal := by
+          refine ENNReal.toReal_mono ?_
+            (eLpNorm_mono (hmz.sub hmw).aestronglyMeasurable fun g ↦ hbound g)
+          exact ((lineHolder_weight_memLp (F := F) hα0 hβs).const_mul _).eLpNorm_ne_top
+      _ = 2 * |z.val.2.2 - w.val.2.2| ^ β * K := by
+          rw [show (fun g : C𝔽 ↦ (2 * |z.val.2.2 - w.val.2.2| ^ β) *
+              (1 + logIdeleClassNorm F g ^ 2) ^ (β / 2)) =
+              (2 * |z.val.2.2 - w.val.2.2| ^ β) •
+                (fun g : C𝔽 ↦ (1 + logIdeleClassNorm F g ^ 2) ^ (β / 2)) from rfl,
+            eLpNorm_const_smul, ENNReal.toReal_mul, ← hK, toReal_eNorm, Real.norm_eq_abs,
+            abs_of_nonneg (by positivity)]
+  have hnorm : c ≤ ‖Λ jz‖ := by
+    rw [← hD.norm_map_of_map_zero (map_zero D), hj]
+    exact hlow jz
+  have hsepzw := hsep z w hwz hz hw
+  have hM0 : 0 ≤ ‖M(φ, χ z.val.1, shift(z.val.2.1, z.val.2.2))‖ := norm_nonneg _
+  have hd0 : 0 ≤ |z.val.2.2 - w.val.2.2| ^ β := Real.rpow_nonneg (abs_nonneg _) _
+  rw [mul_comm (C * (2 * K + 1) / c), ← mul_div_assoc, le_div_iff₀ hc]
+  calc ‖M(φ, χ z.val.1, shift(z.val.2.1, z.val.2.2))‖ * c
+      ≤ ‖M(φ, χ z.val.1, shift(z.val.2.1, z.val.2.2))‖ * ‖Λ jz‖ :=
+        mul_le_mul_of_nonneg_left hnorm hM0
+    _ ≤ C * ‖Λ jz - Λ jw‖ := hsepzw
+    _ ≤ C * (2 * |z.val.2.2 - w.val.2.2| ^ β * K) := mul_le_mul_of_nonneg_left hdiff hC.le
+    _ ≤ |z.val.2.2 - w.val.2.2| ^ β * (C * (2 * K + 1)) := by
+      nlinarith [mul_nonneg hC.le hd0]
+
+end LineHolder
 
 end Majorant
 
